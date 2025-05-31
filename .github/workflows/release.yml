@@ -1,112 +1,88 @@
-name: Release solver
+name: Release Build
 
 on:
-  push:
-    tags:
-      - "*"
-
-permissions:
-  contents: write
+  release:
+    types: [published]
 
 jobs:
   build-linux:
+    name: Build on Linux
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Install dependencies
-        run: sudo apt update && sudo apt install -y cmake rpm dpkg-dev
-      - name: Configure
-        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build GoogleTest
-        run: cmake --build build/_deps/googletest-build
-      - name: Debug GoogleMock Artifacts
-        run: |
-          echo "Listing gmock artifacts in build/lib:"
-          ls build/lib || echo "lib directory does not exist"
-      - name: Build Solver
-        run: cmake --build build --target solver --config Release
-      - name: Install (Move Executable to bin)
-        run: cmake --install build
-      - name: Debug Install Directory
-        run: |
-          echo "Listing install directory:"
-          ls build/install || echo "install directory does not exist"
-      - name: Package
-        run: cd build && cpack -G DEB && cpack -G RPM && cpack -G ZIP
-      - name: Upload
-        uses: softprops/action-gh-release@v1
+      - uses: actions/checkout@v4
         with:
-          files: |
-            build/*.deb
-            build/*.rpm
-            build/*.zip
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-  build-windows:
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v3
+          submodules: recursive
       - name: Install dependencies
-        run: choco install cmake -y
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential cmake dpkg-dev rpm
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build GoogleTest
-        run: cmake --build build/_deps/googletest-build --config Release
-      - name: Debug GoogleMock Artifacts
-        run: |
-          echo "Listing gmock artifacts in build/lib/Release:"
-          if (Test-Path build/lib/Release) { Get-ChildItem build/lib/Release } else { Write-Host "lib directory does not exist" }
-      - name: Build Solver
-        run: cmake --build build --target solver --config Release
-      - name: Install (Move Executable to bin)
-        run: cmake --install build
-      - name: Debug Build Directories
-        run: |
-          echo "Listing build directory after install:"
-          if (Test-Path build) { Get-ChildItem build } else { Write-Host "build directory does not exist" }
-          echo "Listing install directory:"
-          if (Test-Path build/install) { Get-ChildItem build/install } else { Write-Host "install directory does not exist" }
+      - name: Build
+        run: cmake --build build --config Release --parallel $(nproc)
       - name: Package
         run: |
           cd build
-          cpack -G WIX || cpack -G NSIS
-      - name: Upload
-        uses: softprops/action-gh-release@v1
+          cpack -G TGZ
+          cpack -G DEB
+          cpack -G RPM
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: build/*.msi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: linux-release
+          path: |
+            build/*.tar.gz
+            build/*.deb
+            build/*.rpm
 
-  build-macos:
-    runs-on: macos-latest
+  build-windows:
+    name: Build on Windows
+    runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v3
-      - name: Install CMake
-        run: brew install cmake
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Setup WiX
+        run: |
+          choco install wixtoolset -y
+          echo "WIX=C:\Program Files (x86)\WiX Toolset v3.11\bin" >> $env:GITHUB_ENV
+      - name: Prepare license
+        shell: pwsh
+        run: |
+          if (!(Test-Path "LICENSE.rtf")) { " " | Out-File -Encoding ASCII "LICENSE.rtf" }
       - name: Configure
         run: cmake -B build -DCMAKE_BUILD_TYPE=Release
-      - name: Build GoogleTest
-        run: cmake --build build/_deps/googletest-build
-      - name: Debug GoogleMock Artifacts
+      - name: Build
+        run: cmake --build build --config Release
+      - name: Package
         run: |
-          echo "Listing gmock artifacts in build/lib:"
-          ls build/lib || echo "lib directory does not exist"
-      - name: Build Solver
-        run: cmake --build build --target solver --config Release
-      - name: Install (Move Executable to bin)
-        run: cmake --install build
-      - name: Debug Install Directory
-        run: |
-          echo "Listing install directory:"
-          ls build/install || echo "install directory does not exist"
+          cd build
+          cpack -G WIX -C Release -V --debug
+      - name: Upload Windows Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: build/*.msi
+          if-no-files-found: warn
+
+  build-macos:
+    name: Build on macOS
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - name: Configure
+        run: cmake -B build -DCMAKE_BUILD_TYPE=Release
+      - name: Build
+        run: cmake --build build --config Release --parallel 2
       - name: Package
         run: |
           cd build
           cpack -G DragNDrop
-      - name: Upload
-        uses: softprops/action-gh-release@v1
+      - name: Upload macOS Artifacts
+        uses: actions/upload-artifact@v4
         with:
-          files: build/*.dmg
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: macos-release
+          path: build/*.dmg
+          if-no-files-found: warn
