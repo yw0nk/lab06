@@ -67,7 +67,7 @@ if(WIN32)
     set(CPACK_RESOURCE_FILE_LICENSE "${CMAKE_CURRENT_SOURCE_DIR}/LICENSE.rtf")
 else()
     set(CPACK_GENERATOR "TGZ;DEB;RPM")
-    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "VaDIm <vadimrudenko386@gmail.com>")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "yw0nk <yw0nk@gmail.com>")
     set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "amd64")
 endif()
 
